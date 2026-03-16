@@ -1,20 +1,15 @@
-<html>
-<head>
-<script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
-<script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/build/aframe-ar.js"></script>
-</head>
+<a-scene embedded arjs>
 
-<body style="margin:0; overflow:hidden">
+<a-marker type="pattern" url="./marker.patt">
 
-  <a-scene embedded arjs>
+<a-entity 
+gltf-model="./model.glb"
+position="0 0 0"
+scale="0.1 0.1 0.1">
+</a-entity>
 
-    <a-marker type="pattern" url="./marker.patt">
-      <a-box position="0 0.5 0" color="red"></a-box>
-    </a-marker>
+</a-marker>
 
-  <a-entity camera></a-entity>
+<a-entity camera></a-entity>
 
 </a-scene>
-
-</body>
-</html>
