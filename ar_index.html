@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Display Unit — AR Viewer</title>
+
+  <!-- A-Frame first, then MindAR (order matters) -->
+  <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #000;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+
+    #loading {
+      position: fixed; inset: 0; z-index: 100;
+      background: #111; color: #fff;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 16px;
+    }
+    #loading-bar-wrap { width: 220px; height: 6px; background: #333; border-radius: 3px; overflow: hidden; }
+    #loading-bar { height: 100%; width: 0%; background: #fff; border-radius: 3px; transition: width 0.3s ease; }
+    #loading p { font-size: 13px; color: #aaa; }
+    #loading .brand { font-size: 18px; font-weight: 600; letter-spacing: 0.04em; }
+
+    #fallback {
+      display: none; position: fixed; inset: 0; z-index: 200;
+      background: #111; color: #fff;
+      flex-direction: column; align-items: center; justify-content: center;
+      padding: 32px; text-align: center; gap: 16px;
+    }
+    #fallback h2 { font-size: 20px; font-weight: 600; }
+    #fallback p { font-size: 14px; color: #aaa; line-height: 1.6; max-width: 280px; }
+
+    #ui { display: none; position: fixed; inset: 0; z-index: 50; pointer-events: none; }
+
+    #topbar {
+      position: absolute; top: 0; left: 0; right: 0;
+      padding: 14px 16px; display: flex; align-items: center; pointer-events: auto;
+    }
+    .label {
+      background: rgba(0,0,0,0.55); backdrop-filter: blur(8px);
+      color: #fff; font-size: 12px; font-weight: 500;
+      padding: 6px 12px; border-radius: 20px;
+    }
+
+    #hint {
+      position: absolute; bottom: 110px; left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,0.55); backdrop-filter: blur(8px);
+      color: #fff; font-size: 12px; padding: 8px 16px; border-radius: 20px;
+      white-space: nowrap; transition: opacity 1s ease;
+    }
+
+    #controls {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      padding: 16px 20px 28px;
+      display: flex; gap: 10px; justify-content: center; pointer-events: auto;
+    }
+    .btn {
+      background: rgba(0,0,0,0.6); backdrop-filter: blur(10px);
+      border: 1px solid rgba(255,255,255,0.18);
+      color: #fff; font-size: 13px; font-weight: 500;
+      padding: 11px 18px; border-radius: 24px; cursor: pointer;
+      -webkit-tap-highlight-color: transparent; transition: background 0.15s;
+    }
+    .btn:active { background: rgba(255,255,255,0.18); }
+    .btn.active { background: rgba(255,255,255,0.22); border-color: rgba(255,255,255,0.5); }
+
+    #info-card {
+      display: none; position: fixed; bottom: 100px; left: 16px; right: 16px; z-index: 60;
+      background: rgba(10,10,10,0.88); backdrop-filter: blur(16px);
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 16px; padding: 18px 20px; color: #fff;
+    }
+    #info-card h3 { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+    #info-card p  { font-size: 13px; color: #ccc; line-height: 1.5; }
+    #info-close {
+      position: absolute; top: 12px; right: 14px;
+      background: rgba(255,255,255,0.12); border: none;
+      color: #fff; font-size: 16px; width: 28px; height: 28px;
+      border-radius: 50%; cursor: pointer;
+    }
+
+    #tracker-lost {
+      display: none; position: fixed; inset: 0; z-index: 45;
+      background: rgba(0,0,0,0.5);
+      align-items: center; justify-content: center;
+    }
+    #tracker-lost p {
+      background: rgba(0,0,0,0.7); color: #fff;
+      padding: 12px 20px; border-radius: 12px; font-size: 14px;
+    }
+
+    #src-badge {
+      font-size: 10px; color: rgba(255,255,255,0.3);
+      position: fixed; bottom: 6px; right: 10px; z-index: 80;
+    }
+  </style>
+</head>
+<body>
+
+<div id="loading">
+  <div class="brand">AR Viewer</div>
+  <div id="loading-bar-wrap"><div id="loading-bar"></div></div>
+  <p id="loading-msg">Loading AR engine…</p>
+</div>
+
+<div id="fallback">
+  <h2>AR not available</h2>
+  <p>Your browser does not support WebAR, or camera permission was denied.<br><br>Try Safari on iOS or Chrome on Android.</p>
+</div>
+
+<a-scene
+  id="arscene"
+  mindar-image="imageTargetSrc: marker.mind; autoStart: false; uiLoading: no; uiError: no; uiScanning: no; filterMinCF: 0.001; filterBeta: 0.001;"
+  color-space="sRGB"
+  renderer="colorManagement: true; physicallyCorrectLights: true"
+  vr-mode-ui="enabled: false"
+  device-orientation-permission-ui="enabled: false"
+  style="width:100%;height:100%;"
+>
+  <a-assets timeout="15000">
+    <a-asset-item id="fsdu-model" src="models/fsdu.glb"></a-asset-item>
+  </a-assets>
+
+  <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+
+  <a-entity id="ar-root" mindar-image-target="targetIndex: 0">
+
+    <!--
+      GLB model — cone, cube, LOGO meshes — animation clip: Animation
+      Scale may need adjusting once you see it on device.
+      1 unit = 1 metre. If the model appears too small/large, change the scale attribute.
+    -->
+    <a-gltf-model
+      id="fsdu"
+      src="#fsdu-model"
+      position="0 0 0"
+      scale="1 1 1"
+      animation-mixer="clip: Animation; loop: repeat; timeScale: 1"
+    ></a-gltf-model>
+
+    <!-- Dimension footprint overlay (Dimensions button) -->
+    <a-plane id="dim-footprint"
+      position="0 0.002 0" rotation="-90 0 0"
+      width="0.40" height="0.60"
+      color="#ffffff" opacity="0"
+      material="transparent: true; side: double"></a-plane>
+
+    <a-text id="dim-label"
+      value="400 x 600 mm footprint"
+      position="0 0.003 0.38" rotation="-90 0 0"
+      align="center" width="0.9"
+      color="#ffffff" opacity="0"></a-text>
+
+  </a-entity>
+</a-scene>
+
+<div id="ui">
+  <div id="topbar"><span class="label">Display unit &middot; 1400 mm</span></div>
+  <div id="hint">Point camera at the marker image</div>
+  <div id="controls">
+    <button class="btn" id="btn-fold"   onclick="toggleFold()">Unfold</button>
+    <button class="btn" id="btn-rotate" onclick="toggleRotate()">Rotate</button>
+    <button class="btn" id="btn-dims"   onclick="toggleDims()">Dimensions</button>
+  </div>
+</div>
+
+<div id="info-card">
+  <button id="info-close" onclick="closeInfo()">&#x2715;</button>
+  <h3 id="info-title"></h3>
+  <p  id="info-body"></p>
+</div>
+
+<div id="tracker-lost"><p>Move camera back to the marker</p></div>
+
+<div id="src-badge"></div>
+
+<script>
+// ── Tracking ─────────────────────────────────────────────────
+var params  = new URLSearchParams(window.location.search);
+var _src    = params.get('src')    || 'direct';
+var _client = params.get('client') || '';
+document.getElementById('src-badge').textContent = _src + (_client ? ' / ' + _client : '');
+
+function track(evt, extra) {
+  if (typeof gtag !== 'undefined') {
+    gtag('event', evt, Object.assign({ source: _src, client_id: _client }, extra || {}));
+  }
+}
+track('ar_page_load');
+
+// ── Loading ──────────────────────────────────────────────────
+function setLoad(pct, msg) {
+  document.getElementById('loading-bar').style.width = pct + '%';
+  if (msg) document.getElementById('loading-msg').textContent = msg;
+}
+setLoad(20, 'Loading AR engine…');
+
+// ── Fallback ─────────────────────────────────────────────────
+function showFallback(reason) {
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('fallback').style.display = 'flex';
+  track('ar_fallback', { reason: reason || 'unknown' });
+}
+
+// ── Scene startup ────────────────────────────────────────────
+var scene  = document.getElementById('arscene');
+var arRoot = document.getElementById('ar-root');
+
+scene.addEventListener('loaded', function () {
+  setLoad(60, 'Requesting camera…');
+
+  var sys = scene.systems['mindar-image-system'];
+  if (!sys) { showFallback('no-mindar'); return; }
+
+  sys.start().then(function () {
+    setLoad(100, 'Ready');
+    setTimeout(function () {
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('ui').style.display = 'block';
+      track('ar_started');
+    }, 350);
+    setTimeout(function () {
+      document.getElementById('hint').style.opacity = '0';
+    }, 5000);
+  }).catch(function (err) {
+    showFallback(err && err.name ? err.name : 'start-error');
+  });
+});
+
+arRoot.addEventListener('targetFound', function () {
+  document.getElementById('tracker-lost').style.display = 'none';
+  track('ar_marker_found');
+});
+arRoot.addEventListener('targetLost', function () {
+  document.getElementById('tracker-lost').style.display = 'flex';
+});
+
+// ── Fold button — drives GLB animation clip ───────────────────
+// timeScale: 1 = forward (fold), -1 = backward (unfold)
+// When designer delivers separate fold/unfold clips, change clip name accordingly.
+var folded = false;
+function toggleFold() {
+  folded = !folded;
+  var btn  = document.getElementById('btn-fold');
+  var fsdu = document.getElementById('fsdu');
+  btn.textContent = folded ? 'Fold' : 'Unfold';
+  btn.classList.toggle('active', folded);
+  fsdu.setAttribute('animation-mixer', 'clip: Animation; loop: once; timeScale: ' + (folded ? 1 : -1));
+  track('ar_fold', { state: folded ? 'folded' : 'open' });
+}
+
+// ── Rotation ─────────────────────────────────────────────────
+var rotating = false;
+var rotAngle = 0;
+var rotTimer = null;
+
+function toggleRotate() {
+  rotating = !rotating;
+  document.getElementById('btn-rotate').classList.toggle('active', rotating);
+  if (rotating) {
+    rotTimer = setInterval(function () {
+      rotAngle = (rotAngle + 1) % 360;
+      arRoot.setAttribute('rotation', '0 ' + rotAngle + ' 0');
+    }, 16);
+  } else {
+    clearInterval(rotTimer);
+    rotTimer = null;
+  }
+  track('ar_rotate', { state: rotating ? 'on' : 'off' });
+}
+
+// ── Dimensions ───────────────────────────────────────────────
+var dimsOn = false;
+
+function toggleDims() {
+  dimsOn = !dimsOn;
+  document.getElementById('btn-dims').classList.toggle('active', dimsOn);
+  document.getElementById('dim-footprint').setAttribute('opacity', dimsOn ? '0.25' : '0');
+  document.getElementById('dim-label').setAttribute('opacity',     dimsOn ? '1'    : '0');
+  track('ar_dims', { state: dimsOn ? 'on' : 'off' });
+}
+
+function closeInfo() {
+  document.getElementById('info-card').style.display = 'none';
+}
+// Tap-to-inspect re-enabled once final GLB mesh names are confirmed.
+</script>
+</body>
+</html>
